@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reader Bookmarklet</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f3ec;
+      --text: #202124;
+      --muted: #62666d;
+      --panel: #ffffff;
+      --border: #d9d4c8;
+      --accent: #276749;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #17191b;
+        --text: #ece7dc;
+        --muted: #aaa398;
+        --panel: #222528;
+        --border: #393d40;
+        --accent: #8fd3a3;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.55 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      width: min(860px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 48px 0;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(2rem, 5vw, 3.8rem);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+    p { color: var(--muted); }
+    .bookmark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      margin: 20px 0;
+      padding: 0 18px;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      font-weight: 700;
+      text-decoration: none;
+      user-select: none;
+    }
+    .panel {
+      margin-top: 28px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    ol { padding-left: 1.4rem; }
+    li + li { margin-top: 8px; }
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      background: transparent;
+      color: var(--text);
+      font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    button {
+      min-height: 40px;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 6px;
+      padding: 0 14px;
+      background: var(--accent);
+      color: var(--bg);
+      font-weight: 700;
+      cursor: pointer;
+    }
+    code {
+      padding: 0.1em 0.25em;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--muted) 15%, transparent);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Reader Bookmarklet</h1>
+    <p>Drag this link to your bookmarks bar, then click it on an article page.</p>
+    <a id="bookmarklet" class="bookmark" href="#">Reader View</a>
+
+    <section class="panel">
+      <h2>Install</h2>
+      <ol>
+        <li>Show your browser bookmarks bar.</li>
+        <li>Drag <strong>Reader View</strong> above into the bookmarks bar.</li>
+        <li>Open an article and click the bookmark.</li>
+      </ol>
+      <p>If dragging is blocked or Safari strips the code, create any bookmark, edit it, then paste the code below into the bookmark's URL/location field.</p>
+      <textarea id="code" readonly></textarea>
+      <button id="copy" type="button">Copy Bookmarklet</button>
+    </section>
+
+    <section class="panel">
+      <h2>Notes</h2>
+      <p>This is a best-effort reader mode with PurpleSlurple paragraph anchors. It works on many article pages, but paywalled pages, apps that render content after login, browser extension pages, PDFs, and strict browser-internal pages can still block bookmarklets.</p>
+    </section>
+  </main>
+
+  <script>
+    const source = `(() => {
+  const w = open('about:blank', '_blank');
+  if (!w) {
+    alert('Your browser blocked opening a new tab. Allow pop-ups for this site or disable pop-up blocking for bookmarklets, then run Reader View again.');
+    return;
+  }
+  w.document.open();
+  w.document.write('<!doctype html><title>Reader View</title><body style="font:16px system-ui,sans-serif;padding:2rem">Building reader view...</body>');
+  w.document.close();
+  const doc = document;
+  const loc = location.href;
+  const title = doc.title || '';
+  const byline = doc.querySelector('[rel=author], .byline, .author, [class*=author], [itemprop=author]')?.textContent?.trim() || '';
+  const drop = 'script,style,noscript,iframe,svg,canvas,form,button,input,select,textarea,nav,aside,footer,header,.ad,.ads,.advertisement,.promo,.newsletter,.subscribe,.share,.social,.comments,.comment,[class*=cookie],[id*=cookie],[class*=modal],[role=banner],[role=navigation],[role=complementary]';
+  const keep = 'h1,h2,h3,h4,p,blockquote,pre,code,ul,ol,li,figure,figcaption,img,table,thead,tbody,tr,th,td,article,section,main,div';
+  const esc = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const clean = root => {
+    root.querySelectorAll(drop).forEach(n => n.remove());
+    root.querySelectorAll('*').forEach(n => {
+      [...n.attributes].forEach(a => {
+        if (/^(on|style$)/i.test(a.name)) n.removeAttribute(a.name);
+      });
+    });
+    return root;
+  };
+  const scoreNode = node => {
+    const text = node.innerText || node.textContent || '';
+    const len = text.trim().length;
+    if (len < 240) return 0;
+    const p = node.querySelectorAll('p').length;
+    const h = node.querySelectorAll('h1,h2,h3').length;
+    const commas = (text.match(/,/g) || []).length;
+    const links = [...node.querySelectorAll('a')].reduce((n, a) => n + (a.innerText || '').length, 0);
+    const density = links / Math.max(len, 1);
+    const bad = /comment|meta|footer|footnote|sidebar|related|share|social|nav|menu|promo|ad-|advert/i.test(node.className + ' ' + node.id) ? 0.45 : 1;
+    const good = /article|story|post|entry|content|main|body/i.test(node.className + ' ' + node.id + ' ' + node.tagName) ? 1.35 : 1;
+    return (Math.sqrt(len) + p * 18 + h * 8 + commas * 1.5) * (1 - Math.min(density, 0.85)) * bad * good;
+  };
+  const candidates = [...doc.querySelectorAll('article,main,[role=main],section,div')];
+  let best = candidates.map(n => [scoreNode(n), n]).sort((a, b) => b[0] - a[0])[0]?.[1] || doc.body;
+  best = clean(best.cloneNode(true));
+  best.querySelectorAll('*').forEach(n => {
+    if (!n.matches(keep)) {
+      n.replaceWith(...n.childNodes);
+      return;
+    }
+    const text = (n.textContent || '').trim();
+    if ((n.matches('div,section') && text.length < 40 && !n.querySelector('img,table,pre,blockquote')) || /^(share|advertisement|related|more from|recommended)$/i.test(text)) n.remove();
+  });
+  best.querySelectorAll('img').forEach(img => {
+    const src = img.currentSrc || img.src || img.getAttribute('data-src') || img.getAttribute('data-original') || '';
+    if (!src) { img.remove(); return; }
+    img.src = new URL(src, loc).href;
+    img.removeAttribute('srcset');
+    img.removeAttribute('sizes');
+    img.loading = 'lazy';
+  });
+  best.querySelectorAll('a[href]').forEach(a => {
+    try { a.href = new URL(a.getAttribute('href'), loc).href; } catch {}
+  });
+  const addPurpleSlurple = (root, start = 0) => {
+    let index = start;
+    root.querySelectorAll('p,h1,h2,h3,h4,h5,h6,li').forEach(element => {
+      const fragmentId = 'purp' + index;
+      const link = doc.createElement('a');
+      link.href = '#' + fragmentId;
+      link.id = fragmentId;
+      link.textContent = index;
+      const marker = doc.createElement('span');
+      marker.className = 'purpleslurple';
+      marker.append('(', link, ') ');
+      element.insertBefore(marker, element.firstChild);
+      index += 1;
+    });
+    return index;
+  };
+  addPurpleSlurple(best, 1);
+  const articleTitle = doc.querySelector('article h1, main h1, h1')?.textContent?.trim() || title;
+  const html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(articleTitle) + '</title><style>color-scheme:light dark;body{margin:0;background:#f7f4ed;color:#202124;font:20px/1.7 Georgia,serif}main{max-width:760px;margin:0 auto;padding:44px 22px 80px}h1,h2,h3,h4{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.15;letter-spacing:0}h1{font-size:clamp(2.1rem,6vw,4rem);margin:.2em 0 .15em}h2{font-size:1.65rem;margin:1.7em 0 .4em}h3{font-size:1.3rem;margin:1.4em 0 .35em}.meta{color:#6b665e;font:15px/1.45 system-ui,sans-serif;margin-bottom:2.5rem}.meta a{color:inherit}p,li{max-width:70ch}a{color:#1d5f8a}.purpleslurple{font:700 .72em/1 system-ui,sans-serif;color:#7c3aed;white-space:nowrap}.purpleslurple a{color:#7c3aed;text-decoration:none}.purpleslurple a:hover{text-decoration:underline}img{display:block;max-width:100%;height:auto;margin:1.4rem auto}figure{margin:2rem 0}figcaption{color:#6b665e;font:14px/1.4 system-ui,sans-serif;text-align:center}blockquote{border-left:4px solid #9a8f7c;margin:1.5rem 0;padding-left:1rem;color:#37332d}pre{overflow:auto;padding:1rem;border-radius:6px;background:#24292f;color:#f6f8fa;font:14px/1.5 ui-monospace,monospace}code{font-family:ui-monospace,monospace}table{border-collapse:collapse;width:100%;font-size:16px}td,th{border:1px solid #bbb;padding:.45rem;text-align:left}@media(prefers-color-scheme:dark){body{background:#17191b;color:#ece7dc}.meta,figcaption{color:#aaa398}a{color:#8ec7ff}.purpleslurple,.purpleslurple a{color:#c4a5fd}blockquote{border-color:#777;color:#ddd}}</style></head><body><main><h1><span class="purpleslurple">(<a id="purp0" href="#purp0">0</a>) </span>' + esc(articleTitle) + '</h1><div class="meta">' + (byline ? esc(byline) + '<br>' : '') + '<a href="' + esc(loc) + '">' + esc(loc) + '</a></div>' + best.innerHTML + '</main></body></html>';
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+})();`;
+
+    const bookmarklet = 'javascript:' + encodeURIComponent(source);
+    const link = document.getElementById('bookmarklet');
+    const code = document.getElementById('code');
+    link.href = bookmarklet;
+    code.value = bookmarklet;
+    document.getElementById('copy').addEventListener('click', async () => {
+      await navigator.clipboard.writeText(bookmarklet);
+    });
+  </script>
+</body>
+</html>
